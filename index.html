@@ -7,23 +7,32 @@
   <title>Hospice Dash · A little run for a little good</title>
   <link rel="stylesheet" href="styles.css">
   <script defer src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+  <script defer src="src/core.js"></script>
+  <script defer src="src/scores.js"></script>
+  <script defer src="src/art.js"></script>
   <script defer src="src/game.js"></script>
+  <script defer src="src/leaderboard.js"></script>
 </head>
 <body>
   <main>
-    <header><a class="brand" href="./"><span class="mark">♥</span> Hospice Dash</a><span class="badge">THE FIRST LITTLE ADVENTURE</span></header>
+    <header><a class="brand" href="./"><span class="mark">♥</span> Hospice Dash</a><span class="badge">THE WINGS UPDATE</span></header>
     <section class="intro"><p class="eyebrow">SMALL STEPS. BIG HEART.</p><h1>A little run.<br>A lot of heart.</h1><p>Find your rhythm, hop the hurdles, and see how far you can go.</p></section>
     <section class="game-card" aria-label="Hospice Dash endless runner">
-      <div class="scoreboard"><span><span class="dot"></span> THE GARDEN RUN</span><div>Distance <strong id="score">0</strong><span class="best">Personal best <strong id="best">0</strong></span></div></div>
-      <div class="stage"><div id="game" role="application" tabindex="0" aria-label="Runner game. Press Space, click, or tap to jump over ground obstacles. Do not jump beneath branches or hanging lamps."></div><div id="overlay"><p class="eyebrow" id="overlay-label">READY WHEN YOU ARE</p><h2 id="overlay-title">Let’s take a little run.</h2><p id="overlay-copy">Jump ground obstacles. Stay down under branches and lamps.</p><button id="play" type="button">Start running <span>→</span></button></div></div>
-      <div class="game-footer"><span><kbd>SPACE</kbd> or click / tap to jump · Stay down under branches &amp; lamps</span><span>One button. Endless possibility.</span></div>
+      <div class="scoreboard"><span class="mode-label"><span class="dot"></span><span id="mode-name">THE GARDEN RUN</span></span><div class="score-values"><span>Current run <strong id="score">0</strong></span><span>Previous run <strong id="previous">—</strong></span><span>Personal best <strong id="best">0</strong></span></div></div>
+      <div class="stage"><div id="game" role="application" tabindex="0" aria-label="Space, click or tap to jump in the garden and flap in Scraped Trees. Run beneath hanging obstacles."></div><div id="overlay"><p class="eyebrow" id="overlay-label">READY WHEN YOU ARE</p><h2 id="overlay-title">Let’s take a little run.</h2><p id="overlay-copy">Jump obstacles. Run under branches. Collect wings to fly through Scraped Trees!</p><button id="play" type="button">Start running <span>→</span></button></div></div>
+      <div class="game-footer"><span><kbd>SPACE</kbd> or click / tap · Jump in the garden, flap in the forest</span><span>One button. Endless possibility.</span></div>
     </section>
+    <div class="run-tools"><p id="mode-note" aria-live="off">Collect golden wings to enter Scraped Trees.</p><button id="pause" class="small-button" type="button" disabled>Pause</button><button id="practice" class="small-button" type="button">Practise flying</button></div>
+    <p id="storage-note" class="storage-note" hidden>Your browser is blocking saved scores. Scores will last only while this page stays open.</p>
     <div class="creator-credit"><span>Created by <strong>Inology IT</strong></span><img src="assets/inology-it.png" alt="Inology IT logo" width="376" height="88"></div>
     <p id="status" class="sr-only" aria-live="polite">Loading game.</p>
-    <section class="notes"><div><span>01 / FIND YOUR FEET</span><p>You run automatically.<br>Jump low obstacles. Run under hanging ones.</p></div><div><span>02 / GO A LITTLE FURTHER</span><p>The pace picks up as you go.<br>Can you beat your personal best?</p></div><div><span>03 / MADE WITH HEART</span><p>A first prototype for a hospice game.<br>Built to grow, one step at a time.</p></div></section>
+    <section class="notes"><div><span>01 / FIND YOUR FEET</span><p>You run automatically.<br>Jump low obstacles. Run under hanging ones.</p></div><div><span>02 / GO A LITTLE FURTHER</span><p>The pace picks up as you go.<br>Can you beat your personal best?</p></div><div><span>03 / SPREAD YOUR WINGS</span><p>Collect golden wings to fly.<br>Tap your way through Scraped Trees.</p></div></section>
+    <section class="leaderboard" aria-labelledby="leaderboard-title"><div><p class="eyebrow">THE COMMUNITY BOARD</p><h2 id="leaderboard-title">A little friendly competition.</h2><p>Choose a nickname for your best run. Shared rankings are coming once the scoreboard service is connected.</p></div><form id="nickname-form"><label for="nickname">Your nickname</label><div class="nickname-row"><input id="nickname" name="nickname" maxlength="20" minlength="3" autocomplete="nickname" placeholder="e.g. GardenRunner" required><button type="submit" class="small-button">Save nickname</button></div><p id="nickname-status" role="status">Saved on this device only. Nothing is uploaded yet.</p></form><button type="button" class="small-button" disabled>Upload personal best — coming soon</button></section>
     <footer>HOSPICE DASH <span>Prototype · Scores stay on this device · No payments or donations collected</span></footer>
   </main>
 </body>
 </html>
+
+
 
 

@@ -1,174 +1,164 @@
-/* Change these numbers to experiment with how the game feels. */
-const SETTINGS = { speed: 320, maxSpeed: 540, acceleration: 6, gravity: 1700, jump: -650 };
-const OBSTACLES = [
-  { texture: 'planter', width: 46, height: 52, bodyWidth: 40, bodyHeight: 45 },
-  { texture: 'hedge', width: 82, height: 48, bodyWidth: 76, bodyHeight: 43 },
-  { texture: 'hurdle', width: 50, height: 70, bodyWidth: 44, bodyHeight: 65 },
-  // Their bottom is above a standing runner's head, but inside the jump arc.
-  { texture: 'branch', width: 120, height: 245, bodyWidth: 112, bodyHeight: 85, overhead: true },
-  { texture: 'lamp', width: 64, height: 245, bodyWidth: 56, bodyHeight: 76, overhead: true }
-];
-const ui = Object.fromEntries(['score', 'best', 'overlay', 'overlay-label', 'overlay-title', 'overlay-copy', 'play', 'status', 'game'].map(id => [id, document.getElementById(id)]));
-let best = 0;
-try { const saved = Number(localStorage.getItem('hospice-dash-best')); if (Number.isFinite(saved) && saved > 0) best = Math.floor(saved); } catch { /* Private browsing can disable storage. Playing still works. */ }
-ui.best.textContent = best;
+/* Phaser draws the world; core.js owns fixed-step movement and collisions. */
+const ids = ['score','previous','best','overlay','overlay-label','overlay-title','overlay-copy','play','status','game','mode-name','mode-note','pause','practice','storage-note'];
+const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
+let browserStorage;
+try { browserStorage = localStorage; } catch { browserStorage = { getItem() { throw Error('Storage unavailable'); } }; }
+const scores = HospiceScores.createScores(browserStorage);
+ui.best.textContent = scores.best.toLocaleString();
+ui.previous.textContent = scores.previous === null ? '—' : scores.previous.toLocaleString();
+window.hospicePersonalBest = () => scores.best;
+function storageNotice() { ui['storage-note'].hidden = scores.available; }
+storageNotice();
 
 if (!window.Phaser) {
   ui['overlay-title'].textContent = 'We couldn’t load the game.';
   ui['overlay-copy'].textContent = 'Check your internet connection, then reload this page.';
-  ui.play.textContent = 'Reload';
-  ui.play.onclick = () => location.reload();
-  ui.status.textContent = 'Game unavailable. Internet is needed to load Phaser.';
+  ui.play.textContent = 'Reload'; ui.play.onclick = () => location.reload();
+  ui.practice.disabled = true; ui.pause.disabled = true;
 } else {
+  const { Run, Clock, SETTINGS } = HospiceCore;
   const worldWidth = window.innerWidth < 600 ? 640 : 960;
   document.querySelector('.stage').style.aspectRatio = `${worldWidth} / 400`;
-  class GardenRun extends Phaser.Scene {
+  let run = null, playing = false, paused = false, practice = false, game;
+  let hudTime = 0, saveTime = 0, lastScore = -1;
+  const clock = new Clock();
+  const setText = (el, value) => { value = String(value); if (el.textContent !== value) el.textContent = value; };
+  function updateHud(force = false) {
+    if (!run) return;
+    const value = Math.floor(run.score);
+    if (force || value !== lastScore) {
+      setText(ui.score, value.toLocaleString()); lastScore = value;
+      setText(ui.best, (practice ? scores.best : Math.max(scores.best, value)).toLocaleString());
+    }
+    setText(ui['mode-name'], run.mode === 'flight' ? 'SCRAPED TREES' : 'THE GARDEN RUN');
+    setText(ui['mode-note'], run.mode === 'flight'
+      ? `${practice ? 'Practice · ' : ''}Tap faster to climb, slower to descend · ${Math.max(0, Math.ceil(SETTINGS.flightDuration - run.flightTime))}s of wings`
+      : 'Jump ground obstacles. Run under hanging ones. Collect golden wings to fly!');
+  }
+  function start(asPractice = false) {
+    practice = asPractice; run = new Run(worldWidth); if (practice) run.enterFlight();
+    playing = true; paused = false; clock.accumulator = 0; hudTime = 0; saveTime = 0; lastScore = -1;
+    ui.overlay.hidden = true; ui.pause.disabled = false; ui.pause.textContent = 'Pause';
+    ui.practice.disabled = true; ui.game.focus();
+    game.scene.stop('garden'); game.scene.stop('flight'); game.scene.start(run.mode);
+    updateHud(true); ui.status.textContent = practice ? 'Flying practice. Tap to flap. Practice scores are not saved.' : 'Running. Collect wings for Scraped Trees.';
+  }
+  function pause() {
+    if (!playing || paused) return;
+    paused = true; clock.accumulator = 0; ui.pause.textContent = 'Resume';
+    ui['overlay-label'].textContent = 'TAKE A BREATHER'; ui['overlay-title'].textContent = 'Run paused';
+    ui['overlay-copy'].textContent = 'Your run is waiting. Resume when you are ready.';
+    ui.play.textContent = 'Resume'; ui.overlay.hidden = false;
+    if (!practice) scores.recordBest(run.score);
+    storageNotice();
+  }
+  function resume() { paused = false; clock.accumulator = 0; ui.pause.textContent = 'Pause'; ui.overlay.hidden = true; ui.game.focus(); }
+  function finish(completed = false) {
+    playing = false; ui.pause.disabled = true; ui.practice.disabled = false;
+    if (!practice) { scores.finish(run.score); setText(ui.previous, scores.previous.toLocaleString()); }
+    updateHud(true); storageNotice();
+    ui['overlay-label'].textContent = practice ? 'FLYING PRACTICE' : 'EVERY LITTLE RUN COUNTS';
+    ui['overlay-title'].textContent = completed ? 'Forest cleared!' : 'A lovely little run.';
+    ui['overlay-copy'].textContent = practice
+      ? `${completed ? 'Nice flying!' : run.deathReason} Practice scores are not saved.`
+      : `${Math.floor(run.score).toLocaleString()} metres · ${run.deathReason}`;
+    ui.play.textContent = 'Run again'; ui.overlay.hidden = false;
+    ui.status.textContent = `${ui['overlay-title'].textContent} ${ui['overlay-copy'].textContent}`;
+    window.dispatchEvent(new Event('hospice-score-updated'));
+  }
+  function act() {
+    if (paused) { resume(); return; }
+    if (!playing) { start(); return; }
+    run.input();
+  }
+  class ParkScene extends Phaser.Scene {
+    constructor(key) { super(key); }
     create() {
-      this.running = false;
-      this.distance = 0;
-      this.speed = SETTINGS.speed;
-      this.nextObstacle = 1.5;
-      this.add.rectangle(480, 200, 960, 400, 0xe6efd9);
-      this.add.circle(785, 73, 33, 0xf4d58a);
-      this.clouds = [this.cloud(130, 75), this.cloud(490, 48), this.cloud(900, 115)];
+      createGameArtwork(this); this.objects = new Map(); this.lastPose = '';
+      const flying = this.scene.key === 'flight';
+      this.add.rectangle(worldWidth / 2, 200, worldWidth, 400, flying ? 0xd9e6ce : 0xe6efd9);
+      this.add.circle(worldWidth - 100, 73, 33, 0xf4d58a);
       const scenery = this.add.graphics();
       scenery.fillStyle(0xccdfb4).fillEllipse(140, 310, 630, 230).fillEllipse(780, 310, 770, 300);
       scenery.fillStyle(0xb1cc9d).fillEllipse(520, 345, 820, 190);
-      [60, 370, 850].forEach((x, i) => { scenery.fillStyle(0x8ea782).fillRect(x, 210, 9, 112); scenery.fillStyle(0xa3bf8c).fillCircle(x + 4, 200, 30 + i * 5); });
-      scenery.fillStyle(0x90b182).fillRect(0, 322, 960, 9);
-      scenery.fillStyle(0xecdcb8).fillRect(0, 331, 960, 69);
-      this.marks = Array.from({length: 18}, (_, i) => this.add.rectangle(i * 60, 353 + (i % 3) * 14, 20, 3, 0xd5c59e));
-
-      // Draw our own artwork, so no image downloads or asset setup are needed.
-      const art = this.make.graphics({x: 0, y: 0}, false);
-      // Equal-size frames animate the artwork without moving the collision box.
-      const poses = [
-        { key: 'runner', back: 15, front: 31, arm: 29 },
-        { key: 'run-0', back: 8, front: 36, arm: 30 },
-        { key: 'run-1', back: 19, front: 26, arm: 24 },
-        { key: 'run-2', back: 36, front: 8, arm: 12 },
-        { key: 'run-3', back: 26, front: 19, arm: 24 }
-      ];
-      for (const pose of poses) {
-        art.lineStyle(8, 0x416457).lineBetween(27, 54, pose.back, 66);
-        art.fillStyle(0xd5dfd4).fillRoundedRect(pose.back - 5, 65, 13, 6, 2);
-        art.lineStyle(8, 0x24493f).lineBetween(17, 54, pose.front, 66);
-        art.fillStyle(0xf8faf0).fillRoundedRect(pose.front - 5, 65, 13, 6, 2);
-        art.fillStyle(0x214e43).fillRoundedRect(9, 29, 28, 30, 8);
-        art.fillStyle(0xf4b48c).fillCircle(24, 17, 12);
-        art.fillStyle(0x594b40).fillRoundedRect(12, 3, 24, 10, 4);
-        art.lineStyle(7, 0xf4b48c).lineBetween(25, 34, pose.arm + 5, 43);
-        art.fillStyle(0xf4e4b6).fillCircle(24, 42, 4);
-        art.generateTexture(pose.key, 48, 72); art.clear();
+      for (const x of [60, 270, 460, 700, 870]) {
+        scenery.fillStyle(flying ? 0x93ad83 : 0x8ea782).fillRect(x, flying ? 0 : 210, flying ? 24 : 9, 400);
+        scenery.fillStyle(0xa3bf8c).fillCircle(x + 4, flying ? 60 : 200, 35);
       }
-      art.fillStyle(0x79995b).fillCircle(12, 12, 11).fillCircle(32, 10, 10);
-      art.fillStyle(0xd28662).fillRoundedRect(2, 19, 42, 33, 4);
-      art.fillStyle(0xe49c75).fillRoundedRect(0, 17, 46, 8, 2);
-      art.generateTexture('planter', 46, 52); art.clear();
-      art.fillStyle(0x517447).fillRoundedRect(3, 12, 76, 36, 8);
-      art.fillStyle(0x789858).fillCircle(19, 18, 16).fillCircle(42, 17, 17).fillCircle(64, 18, 16);
-      art.fillStyle(0xa4bc72).fillCircle(17, 12, 4).fillCircle(47, 10, 4).fillCircle(65, 18, 4);
-      art.generateTexture('hedge', 82, 48); art.clear();
-      art.fillStyle(0x9b684b).fillRect(5, 8, 8, 62).fillRect(37, 8, 8, 62);
-      art.fillStyle(0xe9a65c).fillRoundedRect(0, 0, 50, 17, 3);
-      art.fillStyle(0xfff3d5).fillRect(8, 2, 8, 13).fillRect(30, 2, 8, 13);
-      art.generateTexture('hurdle', 50, 70); art.clear();
-      // Branch hangs into the path; there is deliberately no trunk blocking the ground.
-      art.fillStyle(0x76543b).fillRect(93, 0, 14, 200).fillRoundedRect(4, 188, 110, 16, 7);
-      art.fillStyle(0x365c3b).fillRoundedRect(4, 166, 112, 70, 16);
-      art.fillStyle(0x527c45).fillCircle(25, 187, 20).fillCircle(61, 185, 22).fillCircle(94, 190, 20);
-      art.fillStyle(0x7a9b52).fillCircle(22, 178, 7).fillCircle(64, 176, 8);
-      art.fillStyle(0x365c3b).fillRoundedRect(10, 224, 14, 21, 5).fillRoundedRect(81, 220, 17, 25, 5);
-      art.generateTexture('branch', 120, 245); art.clear();
-      art.fillStyle(0x344d48).fillRect(29, 0, 6, 178).fillRoundedRect(4, 169, 56, 12, 4);
-      art.fillStyle(0x344d48).fillRoundedRect(9, 179, 46, 59, 5);
-      art.fillStyle(0xf3ce70).fillRect(15, 184, 34, 44);
-      art.fillStyle(0xffebaa).fillRect(19, 188, 11, 32);
-      art.fillStyle(0x344d48).fillRect(29, 180, 6, 53).fillRoundedRect(4, 234, 56, 11, 4);
-      art.generateTexture('lamp', 64, 245); art.destroy();
-      const floor = this.add.rectangle(480, 344, 960, 26, 0, 0);
-      this.physics.add.existing(floor, true);
-      this.player = this.physics.add.sprite(160, 295, 'runner').setDepth(2);
-      this.player.body.setSize(28, 65).setOffset(9, 7);
-      this.physics.add.collider(this.player, floor);
-      this.obstacles = this.physics.add.group({allowGravity: false, immovable: true});
-      this.physics.add.overlap(this.player, this.obstacles, (player, obstacle) => this.finish(obstacle));
-      this.input.on('pointerdown', () => this.act());
-      this.input.keyboard.on('keydown-SPACE', event => { if (!event.repeat && event.target.tagName !== 'BUTTON') { event.preventDefault(); this.act(); } });
-      ui.play.onclick = () => this.startRun();
-      ui.status.textContent = 'Ready. Start running with the button or Space.';
+      this.marks = [];
+      if (!flying) {
+        scenery.fillStyle(0x90b182).fillRect(0, 322, worldWidth, 9);
+        scenery.fillStyle(0xecdcb8).fillRect(0, 331, worldWidth, 69);
+        for (let i = 0; i < 18; i++) this.marks.push(this.add.rectangle(i * 60, 353 + (i % 3) * 14, 20, 3, 0xd5c59e));
+      }
+      this.wings = this.add.image(160, 200, 'wings').setDepth(2).setScale(0.9).setVisible(flying);
+      this.player = this.add.image(160, run ? run.y : 295, 'runner').setDepth(3);
+      this.pickup = this.add.image(0, 0, 'wings').setVisible(false).setDepth(4);
+      this.pickupLabel = this.add.text(0, 0, 'WINGS', {fontFamily:'sans-serif',fontSize:'13px',fontStyle:'bold',color:'#6c5521',backgroundColor:'#fff4cb',padding:{x:7,y:3}}).setOrigin(0.5).setDepth(4).setVisible(false);
+      const pointer = () => act();
+      const key = event => {
+        if (['INPUT','TEXTAREA','BUTTON','SELECT'].includes(event.target.tagName) || event.target.isContentEditable) return;
+        if (event.code === 'Space' && !event.repeat) { event.preventDefault(); act(); }
+        if (event.code === 'Escape' && !event.repeat && playing) paused ? resume() : pause();
+      };
+      this.input.on('pointerdown', pointer); this.input.keyboard.on('keydown', key);
+      this.events.once('shutdown', () => { this.input.off('pointerdown', pointer); this.input.keyboard.off('keydown', key); });
     }
-    cloud(x, y) {
-      const g = this.add.graphics({x, y});
-      g.fillStyle(0xf8faed).fillRoundedRect(-35, 0, 95, 19, 10).fillCircle(0, 0, 22).fillCircle(27, -4, 28);
+    drawGate(ob) {
+      const g = this.add.graphics().setDepth(1), top = ob.gapY - ob.gap / 2, bottom = ob.gapY + ob.gap / 2;
+      g.fillStyle(0x75543a).fillRect(-30, 0, 40, top).fillRect(-7, bottom, 39, 400-bottom);
+      g.fillStyle(0x8f6845).fillRoundedRect(-44, top-24, 88, 24, 7).fillRoundedRect(-44, bottom, 88, 24, 7);
+      g.fillStyle(0x41693f).fillRoundedRect(-44, top-49, 88, 25, 10).fillRoundedRect(-44, bottom+24, 88, 27, 10);
+      g.fillStyle(0xb4c886).fillRect(-36, top-6, 72, 4).fillRect(-36, bottom+2, 72, 4);
       return g;
     }
-    startRun() {
-      this.obstacles.clear(true, true);
-      this.distance = 0; this.speed = SETTINGS.speed; this.nextObstacle = 0.8;
-      this.obstaclesSpawned = 0;
-      this.runStep = 0;
-      this.player.setTexture('runner');
-      this.player.clearTint(); this.player.setPosition(160, 295); this.player.body.reset(160, 295);
-      this.physics.resume(); this.running = true;
-      ui.score.textContent = '0'; ui.overlay.hidden = true; ui.game.focus();
-      ui.status.textContent = 'Running. Space, click or tap to jump.';
-    }
-    act() {
-      if (!this.running) { this.startRun(); return; }
-      // Only jump from the ground: holding the button never gives extra jumps.
-      if (this.player.body.blocked.down || this.player.body.touching.down) {
-        this.player.setTexture('runner');
-        this.player.setVelocityY(SETTINGS.jump);
+    renderRun() {
+      if (!run) return;
+      this.player.y = run.y; this.wings.y = run.y;
+      const grounded = run.mode === 'garden' && run.y >= 295;
+      const pose = playing && grounded ? `run-${Math.floor(run.scroll / 32) % 4}` : 'runner';
+      if (pose !== this.lastPose) { this.player.setTexture(pose); this.lastPose = pose; }
+      if (!run.alive) this.player.setTint(0xe2a280);
+      for (let i = 0; i < this.marks.length; i++) this.marks[i].x = ((i * 60 - run.scroll) % 1080 + 1080) % 1080 - 25;
+      for (const ob of run.obstacles) {
+        let graphic = this.objects.get(ob.id);
+        if (!graphic) {
+          graphic = run.mode === 'flight' ? this.drawGate(ob) : this.add.image(ob.x, (ob.type.overhead ? 245 : 331) - ob.type.height / 2, ob.type.texture);
+          this.objects.set(ob.id, graphic);
+        }
+        graphic.x = ob.x;
       }
-    }
-    finish(obstacle) {
-      if (!this.running) return;
-      this.running = false; this.physics.pause(); this.player.setTexture('runner').setTint(0xe2a280);
-      const score = Math.floor(this.distance);
-      if (score > best) { best = score; try { localStorage.setItem('hospice-dash-best', String(best)); } catch {} }
-      ui.best.textContent = best;
-      ui['overlay-label'].textContent = 'EVERY LITTLE RUN COUNTS';
-      ui['overlay-title'].textContent = 'A lovely little run.';
-      const tip = obstacle?.getData('overhead') ? 'Stay on the ground beneath branches and lamps!' : 'Jump over ground obstacles; run beneath hanging ones.';
-      ui['overlay-copy'].textContent = `${score} metres · Best ${best}. ${tip}`;
-      ui.play.innerHTML = 'Run again <span>↻</span>'; ui.overlay.hidden = false;
-      ui.status.textContent = `Game over. Score ${score}. Personal best ${best}. Choose Run again or press Space.`;
+      for (const [id, graphic] of this.objects) {
+        if (!run.obstacles.some(ob => ob.id === id)) { graphic.destroy(); this.objects.delete(id); }
+      }
+      this.pickup.setVisible(Boolean(run.pickup)); this.pickupLabel.setVisible(Boolean(run.pickup));
+      if (run.pickup) { this.pickup.setPosition(run.pickup.x, run.pickup.y); this.pickupLabel.setPosition(run.pickup.x, run.pickup.y - 43); }
     }
     update(time, delta) {
-      if (!this.running) return;
-      const dt = Math.min(delta, 50) / 1000;
-      this.speed = Math.min(SETTINGS.maxSpeed, this.speed + dt * SETTINGS.acceleration);
-      const grounded = this.player.body.blocked.down || this.player.body.touching.down;
-      if (grounded && this.player.body.velocity.y >= 0) {
-        this.runStep += dt * 10 * this.speed / SETTINGS.speed;
-        this.player.setTexture(`run-${Math.floor(this.runStep) % 4}`);
-      } else {
-        this.player.setTexture('runner');
+      if (!playing || paused || document.hidden) return;
+      clock.advance(run, delta);
+      if (run.mode !== this.scene.key) {
+        if (practice && run.mode === 'garden') { finish(true); return; }
+        updateHud(true); this.scene.start(run.mode); clock.accumulator = 0;
+        ui.status.textContent = run.mode === 'flight' ? 'Wings collected! Scraped Trees. Tap faster to climb and slower to descend.' : 'Back in the garden. Jump over ground obstacles.';
+        return;
       }
-      this.distance += this.speed * dt / 25; ui.score.textContent = Math.floor(this.distance);
-      this.marks.forEach(mark => { mark.x -= this.speed * dt; if (mark.x < -25) mark.x += 1080; });
-      this.clouds.forEach(cloud => { cloud.x -= dt * 12; if (cloud.x < -100) cloud.x = 1060; });
-      this.nextObstacle -= dt;
-      if (this.nextObstacle <= 0) {
-        // Teach jump / stay down immediately, then mix both kinds unpredictably.
-        const introduction = [OBSTACLES[0], OBSTACLES[3], OBSTACLES[1], OBSTACLES[4]];
-        const type = introduction[this.obstaclesSpawned] || Phaser.Utils.Array.GetRandom(OBSTACLES);
-        const bottom = type.overhead ? 245 : 331;
-        const obstacle = this.obstacles.create(worldWidth + type.width / 2, bottom - type.height / 2, type.texture);
-        obstacle.setData('overhead', Boolean(type.overhead));
-        obstacle.body.setSize(type.bodyWidth, type.bodyHeight).setOffset((type.width - type.bodyWidth) / 2, type.height - type.bodyHeight);
-        this.obstaclesSpawned++;
-        const difficulty = (this.speed - SETTINGS.speed) / (SETTINGS.maxSpeed - SETTINGS.speed);
-        // A jump lasts about 0.77 seconds. Leave time to land before the next one.
-        const recovery = type.overhead ? 0.12 : 0;
-        this.nextObstacle = Phaser.Math.FloatBetween(1.15 - difficulty * 0.2 + recovery, 1.5 - difficulty * 0.3 + recovery);
-      }
-      this.obstacles.getChildren().forEach(obstacle => { obstacle.setVelocityX(-this.speed); if (obstacle.x < -50) obstacle.destroy(); });
+      this.renderRun();
+      hudTime += delta; saveTime += delta;
+      if (hudTime >= 100) { updateHud(); hudTime = 0; }
+      if (saveTime >= 5000) { if (!practice) scores.recordBest(run.score); saveTime = 0; storageNotice(); }
+      if (!run.alive) finish();
     }
   }
-  new Phaser.Game({type: Phaser.AUTO, parent: 'game', width: worldWidth, height: 400,
-    backgroundColor: '#e6efd9', scale: {mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH},
-    physics: {default: 'arcade', arcade: {gravity: {y: SETTINGS.gravity}, debug: false}}, scene: GardenRun});
+  class GardenRun extends ParkScene { constructor() { super('garden'); } }
+  class ScrapedTrees extends ParkScene { constructor() { super('flight'); } }
+  game = new Phaser.Game({type:Phaser.AUTO,parent:'game',width:worldWidth,height:400,backgroundColor:'#e6efd9',
+    scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},scene:[GardenRun,ScrapedTrees]});
+  ui.play.onclick = () => paused ? resume() : start();
+  ui.practice.onclick = () => start(true);
+  ui.pause.onclick = () => paused ? resume() : pause();
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+  window.addEventListener('blur', pause);
+  window.addEventListener('pagehide', () => { if (run && !practice) scores.recordBest(run.score); });
+  ui.status.textContent = 'Ready. Start a run or try flying practice.';
 }
-

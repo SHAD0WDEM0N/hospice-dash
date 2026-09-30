@@ -1,0 +1,15 @@
+HOSPICE DASH — WINGS UPDATE
+
+Keep all files and folders together. Open index.html while connected to the internet.
+
+Garden: Space/click/tap jumps. Run underneath branches and lamps.
+Collect golden wings to enter Scraped Trees.
+Forest: tap faster to climb; slower to descend through the branch openings.
+Practise flying lets you try the forest straight away without changing your scores.
+Pause/Resume is available below the game.
+
+Current run, previous run and personal best are shown separately.
+Best scores are saved in this browser on this device.
+Shared leaderboard uploads are not connected yet; nicknames are saved locally only.
+
+Please report any stutter with your device, browser, score and scene.
