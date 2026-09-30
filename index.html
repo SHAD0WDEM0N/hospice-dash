@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183e39">
+  <title>Hospice Dash · A little run for a little good</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+  <script defer src="src/game.js"></script>
+</head>
+<body>
+  <main>
+    <header><a class="brand" href="./"><span class="mark">♥</span> Hospice Dash</a><span class="badge">THE FIRST LITTLE ADVENTURE</span></header>
+    <section class="intro"><p class="eyebrow">SMALL STEPS. BIG HEART.</p><h1>A little run.<br>A lot of heart.</h1><p>Find your rhythm, hop the hurdles, and see how far you can go.</p></section>
+    <section class="game-card" aria-label="Hospice Dash endless runner">
+      <div class="scoreboard"><span><span class="dot"></span> THE GARDEN RUN</span><div>Distance <strong id="score">0</strong><span class="best">Personal best <strong id="best">0</strong></span></div></div>
+      <div class="stage"><div id="game" role="application" tabindex="0" aria-label="Runner game. Press Space, click, or tap to jump over ground obstacles. Do not jump beneath branches or hanging lamps."></div><div id="overlay"><p class="eyebrow" id="overlay-label">READY WHEN YOU ARE</p><h2 id="overlay-title">Let’s take a little run.</h2><p id="overlay-copy">Jump ground obstacles. Stay down under branches and lamps.</p><button id="play" type="button">Start running <span>→</span></button></div></div>
+      <div class="game-footer"><span><kbd>SPACE</kbd> or click / tap to jump · Stay down under branches &amp; lamps</span><span>One button. Endless possibility.</span></div>
+    </section>
+    <div class="creator-credit"><span>Created by <strong>Inology IT</strong></span><img src="assets/inology-it.png" alt="Inology IT logo" width="376" height="88"></div>
+    <p id="status" class="sr-only" aria-live="polite">Loading game.</p>
+    <section class="notes"><div><span>01 / FIND YOUR FEET</span><p>You run automatically.<br>Jump low obstacles. Run under hanging ones.</p></div><div><span>02 / GO A LITTLE FURTHER</span><p>The pace picks up as you go.<br>Can you beat your personal best?</p></div><div><span>03 / MADE WITH HEART</span><p>A first prototype for a hospice game.<br>Built to grow, one step at a time.</p></div></section>
+    <footer>HOSPICE DASH <span>Prototype · Scores stay on this device · No payments or donations collected</span></footer>
+  </main>
+</body>
+</html>
+
+
