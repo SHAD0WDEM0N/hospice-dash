@@ -23,7 +23,7 @@ Open `index.html` in a browser with an internet connection. Phaser loads from a 
 
 ## GitHub Pages
 
-In Settings → Pages, choose Deploy from a branch, then main and /(root), and save.
+Pages is configured to deploy from the main branch and /(root). Future changes pushed to main should publish automatically.
 The expected address after deployment is https://SHAD0WDEM0N.github.io/hospice-dash/.
 
 Prototype only: no donations or player accounts. Local scores are not a verified competition leaderboard.
